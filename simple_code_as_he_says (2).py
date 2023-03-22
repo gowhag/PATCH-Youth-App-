@@ -14,15 +14,13 @@ height=st.number_input("Enter height in m", step=0.1)
 
 button=st.button("Calculate BMI!")
 if button:
-  bmi=mass/(height)**2
-  st.success(f"Your BMI is {bmi}")
-
-if bmi>30:
-  st.success(f"You are at high risk of developing obesity.")
-if 24.9 < bmi < 30.1:
-  st.success(f"You are at medium risk of developing obesity.")
-if 18.4 < bmi < 25:
-  st.success(f"You are at low risk of developing obesity.")
-if bmi<18.5:
-  st.success(f"You are at high risk of nutriotional deficiency.")
+    bmi=mass/(height)**2
+    if bmi>30:
+        st.success(f"Your BMI is {bmi}.You are at high risk of developing obesity.")
+    if 25 < bmi <= 30:
+        st.success(f"Your BMI is {bmi}.You are at medium risk of developing obesity.")
+    if 18.5 <= bmi <= 25:
+        st.success(f"Your BMI is {bmi}.You are at low risk of developing obesity.")
+    if bmi<18.5:
+        st.success(f"Your BMI is {bmi}.You are at high risk of nutriotional deficiency.")
 

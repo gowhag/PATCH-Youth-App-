@@ -1,7 +1,11 @@
 import streamlit as st
 from datetime import date
+from openai import OpenAI
+import time
 
 st.set_page_config(page_title="Youth Support App", page_icon="🌱", layout="centered")
+
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.markdown(
     """
@@ -73,20 +77,9 @@ if "chat_history" not in st.session_state:
             "content": "Hey! I am your AI wellbeing buddy. How are you feeling today?",
         }
     ]
-
-
-def bot_reply(message: str) -> str:
-    text = message.lower()
-    if any(word in text for word in ["anxious", "stress", "worried", "panic"]):
-        return "Thanks for sharing 💛 Try this: inhale 4s, hold 4s, exhale 6s for one minute. Want another grounding exercise?"
-    if any(word in text for word in ["sad", "down", "lonely", "upset"]):
-        return "I hear you. You're not alone. Would you like a quick mood-lift idea or a journaling prompt right now?"
-    if any(word in text for word in ["angry", "mad", "frustrated"]):
-        return "That sounds intense. A short reset can help: unclench your jaw, relax your shoulders, take 3 slow breaths."
-    if any(word in text for word in ["sleep", "tired", "insomnia"]):
-        return "Sleep tip 🌙: dim lights 30 mins before bed and avoid scrolling. Want a 2-minute wind-down routine?"
-    return "Good share. I can help with breathing, journaling prompts, sleep tips, or coping ideas. Pick one and we can do it together."
-
+if "thread_id" not in st.session_state:
+    thread = client.beta.threads.create()
+    st.session_state.thread_id = thread.id
 
 st.title("🌱 My Youth Space")
 st.caption("A youth-focused wellbeing app experience")
@@ -188,7 +181,7 @@ with goals_tab:
 with chats_tab:
     st.markdown("<div class='app-card'>", unsafe_allow_html=True)
     st.subheader("AI Chatbot")
-    st.caption("Private, supportive, and youth-focused (demo).")
+    st.caption("Private, supportive, and youth-focused.")
 
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
@@ -200,10 +193,45 @@ with chats_tab:
         with st.chat_message("user"):
             st.write(prompt)
 
-        response = bot_reply(prompt)
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
-        with st.chat_message("assistant"):
-            st.write(response)
+        try:
+            client.beta.threads.messages.create(
+                thread_id=st.session_state.thread_id,
+                role="user",
+                content=prompt
+            )
+
+            run = client.beta.threads.runs.create(
+                thread_id=st.session_state.thread_id,
+                assistant_id=st.secrets["ASSISTANT_ID"]
+            )
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    while run.status in ["queued", "in_progress", "cancelling"]:
+                        time.sleep(1)
+                        run = client.beta.threads.runs.retrieve(
+                            thread_id=st.session_state.thread_id,
+                            run_id=run.id
+                        )
+
+                    if run.status == "completed":
+                        messages = client.beta.threads.messages.list(
+                            thread_id=st.session_state.thread_id
+                        )
+                        assistant_response = messages.data[0].content[0].text.value
+                        st.write(assistant_response)
+                        st.session_state.chat_history.append(
+                            {"role": "assistant", "content": assistant_response}
+                        )
+                    else:
+                        error_msg = f"Run ended with status: {run.status}"
+                        st.error(error_msg)
+                        st.session_state.chat_history.append(
+                            {"role": "assistant", "content": error_msg}
+                        )
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
     if st.button("Clear chat", key="clear_chat_btn"):
         st.session_state.chat_history = [
@@ -212,6 +240,8 @@ with chats_tab:
                 "content": "Hey! I am your AI wellbeing buddy. How are you feeling today?",
             }
         ]
+        thread = client.beta.threads.create()
+        st.session_state.thread_id = thread.id
         st.success("Chat cleared.")
 
     st.markdown("</div>", unsafe_allow_html=True)

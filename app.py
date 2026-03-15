@@ -80,7 +80,25 @@ st.markdown(
         margin-bottom: 0.9rem;
     }
 
-    /* Makes the chat input feel cleaner */
+    .worker-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 14px;
+        padding: 0.85rem;
+        margin-bottom: 0.7rem;
+    }
+
+    .worker-name {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #0F172A;
+    }
+
+    .worker-meta {
+        font-size: 0.85rem;
+        color: #64748B;
+    }
+
     div[data-testid="stChatInput"] {
         margin-top: 0.5rem;
     }
@@ -141,7 +159,18 @@ if "thread_id" not in st.session_state:
         st.error(f"Could not create OpenAI thread: {type(e).__name__}")
         st.stop()
 
-# ---------- HELPER ----------
+if "worker_chat_history" not in st.session_state:
+    st.session_state.worker_chat_history = [
+        {
+            "role": "assistant",
+            "content": "Hi, this is the youth support team inbox. A youth worker will reply as soon as they are available.",
+        }
+    ]
+
+if "selected_worker" not in st.session_state:
+    st.session_state.selected_worker = "Alicia Tan"
+
+# ---------- HELPERS ----------
 def get_assistant_reply(user_prompt: str) -> str:
     client.beta.threads.messages.create(
         thread_id=st.session_state.thread_id,
@@ -177,12 +206,13 @@ def get_assistant_reply(user_prompt: str) -> str:
 
     return "Sorry — I couldn't read the assistant's reply."
 
+
 # ---------- UI ----------
 st.title("🌱 My Youth Space")
 st.caption("A youth-focused wellbeing app experience")
 
-home_tab, checkin_tab, goals_tab, chats_tab, resources_tab, profile_tab = st.tabs(
-    ["Home", "Check-in", "Goals", "Chats", "Resources", "Profile"]
+home_tab, checkin_tab, goals_tab, chats_tab, workers_tab, resources_tab, profile_tab = st.tabs(
+    ["Home", "Check-in", "Goals", "AI Chat", "Youth Workers", "Resources", "Profile"]
 )
 
 with home_tab:
@@ -303,7 +333,6 @@ with chats_tab:
         unsafe_allow_html=True,
     )
 
-    # Scrollable message area
     chat_messages_box = st.container(height=420)
 
     with chat_messages_box:
@@ -311,8 +340,7 @@ with chats_tab:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-    # Input appears after messages, so it sits at the bottom of the chat card
-    prompt = st.chat_input("Type a message...")
+    prompt = st.chat_input("Type a message...", key="ai_chat_input")
 
     if prompt:
         st.session_state.chat_history.append({"role": "user", "content": prompt})
@@ -335,25 +363,100 @@ with chats_tab:
         )
         st.rerun()
 
-    col1, col2 = st.columns([1, 1])
+    if st.button("Clear chat", key="clear_chat_btn", use_container_width=True):
+        st.session_state.chat_history = [
+            {
+                "role": "assistant",
+                "content": "Hey! I am your AI wellbeing buddy. How are you feeling today?",
+            }
+        ]
+        try:
+            thread = client.beta.threads.create()
+            st.session_state.thread_id = thread.id
+        except Exception:
+            pass
+        st.rerun()
 
-    with col1:
-        if st.button("Clear chat", key="clear_chat_btn", use_container_width=True):
-            st.session_state.chat_history = [
-                {
-                    "role": "assistant",
-                    "content": "Hey! I am your AI wellbeing buddy. How are you feeling today?",
-                }
-            ]
-            try:
-                thread = client.beta.threads.create()
-                st.session_state.thread_id = thread.id
-            except Exception:
-                pass
-            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with col2:
-        st.button("Support mode", key="support_mode_btn", use_container_width=True)
+with workers_tab:
+    st.markdown("<div class='app-card'>", unsafe_allow_html=True)
+    st.subheader("Talk to a youth worker")
+    st.caption("Connect with a real support person when you want human help.")
+
+    workers = {
+        "Alicia Tan": {"role": "Youth Worker", "status": "Available now"},
+        "Daniel Lee": {"role": "Counselling Support", "status": "Replies within 1 hour"},
+        "Nur Aisyah": {"role": "Peer Support Lead", "status": "Available today"},
+    }
+
+    selected_worker = st.selectbox(
+        "Choose a youth worker",
+        list(workers.keys()),
+        index=list(workers.keys()).index(st.session_state.selected_worker),
+    )
+    st.session_state.selected_worker = selected_worker
+
+    st.markdown(
+        f"""
+        <div class='worker-card'>
+            <div class='worker-name'>{selected_worker}</div>
+            <div class='worker-meta'>{workers[selected_worker]['role']} · {workers[selected_worker]['status']}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Request chat", key="request_worker_chat", use_container_width=True):
+            st.success(f"Chat request sent to {selected_worker} ✅")
+    with c2:
+        if st.button("Book later", key="book_worker_later", use_container_width=True):
+            st.info(f"A booking request for {selected_worker} has been noted.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='chat-shell'>", unsafe_allow_html=True)
+    st.markdown("<div class='chat-title'>Youth Worker Chat</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='chat-subtitle'>Secure conversation with {selected_worker} (demo UI).</div>",
+        unsafe_allow_html=True,
+    )
+
+    worker_chat_box = st.container(height=380)
+
+    with worker_chat_box:
+        for message in st.session_state.worker_chat_history:
+            role = "assistant" if message["role"] == "assistant" else "user"
+            with st.chat_message(role):
+                st.write(message["content"])
+
+    worker_prompt = st.chat_input("Message your youth worker...", key="worker_chat_input")
+
+    if worker_prompt:
+        st.session_state.worker_chat_history.append(
+            {"role": "user", "content": worker_prompt}
+        )
+
+        demo_reply = (
+            f"Thanks for your message. This is a demo inbox for {selected_worker}. "
+            "In a real version, a youth worker would reply here."
+        )
+
+        st.session_state.worker_chat_history.append(
+            {"role": "assistant", "content": demo_reply}
+        )
+        st.rerun()
+
+    if st.button("Clear youth worker chat", key="clear_worker_chat_btn", use_container_width=True):
+        st.session_state.worker_chat_history = [
+            {
+                "role": "assistant",
+                "content": "Hi, this is the youth support team inbox. A youth worker will reply as soon as they are available.",
+            }
+        ]
+        st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
